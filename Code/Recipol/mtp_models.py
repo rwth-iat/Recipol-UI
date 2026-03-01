@@ -4,6 +4,8 @@ class Instance:
     def __init__(self, name, id):
         self.name = name # name of the instance
         self.id = id # ID of the instance
+        self.ref_base_system_unit_path = None # full RefBaseSystemUnitPath from AML
+        self.parameter_type = None # short type parsed from RefBaseSystemUnitPath, e.g. ProcessValueOut
         self.refid = None # refID of the instance
         self.min = None # minimal value of the instance
         self.max = None # maximal value of the instance
@@ -84,6 +86,14 @@ class Instance:
     def addRefId(self, refId: str):
         """Adds a refID to the instance"""
         self.refid = refId
+
+    def addRefBaseSystemUnitPath(self, path: str):
+        """Adds RefBaseSystemUnitPath and derives a short parameter type from it."""
+        self.ref_base_system_unit_path = path
+        if path:
+            self.parameter_type = path.rsplit("/", 1)[-1]
+        else:
+            self.parameter_type = None
 
     def addMin(self, minVal:float):
         """Adds a low limit value"""

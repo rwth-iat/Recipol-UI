@@ -1,5 +1,6 @@
 ﻿"""Main XML parsing workflow for MTP files."""
 
+from copy import deepcopy
 from defusedxml.ElementTree import parse
 from pathlib import Path
 
@@ -69,6 +70,7 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
                                         ):    #or instNode.get("RefBaseSystemUnitPath") == "MTPDataObjectSUCLib/DataAssembly/ServiceElement/ProcedureHealthView" æŽ’é™¤äº†procedures, å› ä¸ºproceduresåœ¨serviceé‡Œæœ‰å¦å¤–çš„èŠ‚ç‚¹
                                         continue
                                     inst = Instance(name=instNode.get("Name"), id=instNode.get("ID"))
+                                    inst.addRefBaseSystemUnitPath(instNode.get("RefBaseSystemUnitPath"))
 
                                     for attrNode in instNode.iter(f"{NAMESPACE}Attribute"):
                                         if attrNode.get("Name") == "RefID":
@@ -478,7 +480,12 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
                                         for refNode in paramNode.iter(f"{NAMESPACE}Attribute"):
                                             if refNode.get("Name") == "RefID" and mtp.hasInstance(refNode.findtext(f"{NAMESPACE}Value")):
                                                 # get the instance the procedure refers to
-                                                procParam = mtp.getInstance(refNode.findtext(f"{NAMESPACE}Value"))
+                                                baseParam = mtp.getInstance(refNode.findtext(f"{NAMESPACE}Value"))
+                                                # keep procedure-scoped metadata without mutating the base instance
+                                                procParam = deepcopy(baseParam)
+                                                procParamPath = paramNode.get("RefBaseSystemUnitPath")
+                                                if procParamPath:
+                                                    procParam.addRefBaseSystemUnitPath(procParamPath)
 
                                                 # add the instance to the procedure's params
                                                 proc.addParameter(procParam)

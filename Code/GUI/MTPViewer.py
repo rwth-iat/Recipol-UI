@@ -119,11 +119,12 @@ class MTPViewer(QWidget):
 
                 # 3层: Parameter (p.params)
                 for pa in getattr(p, 'params', []):
+                    parameter_type = getattr(pa, 'parameter_type', None) or "Parameter"
                     # 将参数的详细信息填入列
                     pa_item = QTreeWidgetItem(p_item, [
                         pa.name, 
                         pa.id,
-                        "Parameter",
+                        parameter_type,
                         str(getattr(pa, 'default', '')), 
                         str(pa.paramElem.get('VSclMin', {}).get('Default', '')),
                         str(pa.paramElem.get('VSclMax', {}).get('Default', '')),
