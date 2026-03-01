@@ -1,6 +1,6 @@
 ﻿"""Main XML parsing workflow for MTP files."""
 
-from copy import deepcopy
+from copy import deepcopy  # clone base instances so procedure-specific metadata won't pollute global instance list
 from defusedxml.ElementTree import parse
 from pathlib import Path
 
@@ -70,6 +70,7 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
                                         ):    #or instNode.get("RefBaseSystemUnitPath") == "MTPDataObjectSUCLib/DataAssembly/ServiceElement/ProcedureHealthView" æŽ’é™¤äº†procedures, å› ä¸ºproceduresåœ¨serviceé‡Œæœ‰å¦å¤–çš„èŠ‚ç‚¹
                                         continue
                                     inst = Instance(name=instNode.get("Name"), id=instNode.get("ID"))
+                                    # Base instance type from Communication/InstanceList layer (fallback type in UI).
                                     inst.addRefBaseSystemUnitPath(instNode.get("RefBaseSystemUnitPath"))
 
                                     for attrNode in instNode.iter(f"{NAMESPACE}Attribute"):
@@ -481,10 +482,12 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
                                             if refNode.get("Name") == "RefID" and mtp.hasInstance(refNode.findtext(f"{NAMESPACE}Value")):
                                                 # get the instance the procedure refers to
                                                 baseParam = mtp.getInstance(refNode.findtext(f"{NAMESPACE}Value"))
-                                                # keep procedure-scoped metadata without mutating the base instance
+                                                # Keep procedure-scoped metadata (e.g. ProcessValueOut) without
+                                                # mutating the shared base instance object.
                                                 procParam = deepcopy(baseParam)
                                                 procParamPath = paramNode.get("RefBaseSystemUnitPath")
                                                 if procParamPath:
+                                                    # Parameter node path is the final type source shown in MTPViewer.
                                                     procParam.addRefBaseSystemUnitPath(procParamPath)
 
                                                 # add the instance to the procedure's params

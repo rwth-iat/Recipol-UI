@@ -119,6 +119,7 @@ class MTPViewer(QWidget):
 
                 # 3层: Parameter (p.params)
                 for pa in getattr(p, 'params', []):
+                    # Show refined parameter type from AML RefBaseSystemUnitPath when available.
                     parameter_type = getattr(pa, 'parameter_type', None) or "Parameter"
                     # 将参数的详细信息填入列
                     pa_item = QTreeWidgetItem(p_item, [

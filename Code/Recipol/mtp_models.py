@@ -4,8 +4,10 @@ class Instance:
     def __init__(self, name, id):
         self.name = name # name of the instance
         self.id = id # ID of the instance
-        self.ref_base_system_unit_path = None # full RefBaseSystemUnitPath from AML
-        self.parameter_type = None # short type parsed from RefBaseSystemUnitPath, e.g. ProcessValueOut
+        # Full AML path (e.g. ".../ProcessValueOut") used to classify parameter nodes in UI.
+        self.ref_base_system_unit_path = None
+        # Derived short type from path tail (e.g. ProcessValueOut).
+        self.parameter_type = None
         self.refid = None # refID of the instance
         self.min = None # minimal value of the instance
         self.max = None # maximal value of the instance
@@ -88,7 +90,7 @@ class Instance:
         self.refid = refId
 
     def addRefBaseSystemUnitPath(self, path: str):
-        """Adds RefBaseSystemUnitPath and derives a short parameter type from it."""
+        """Store RefBaseSystemUnitPath and derive UI-friendly parameter type."""
         self.ref_base_system_unit_path = path
         if path:
             self.parameter_type = path.rsplit("/", 1)[-1]
