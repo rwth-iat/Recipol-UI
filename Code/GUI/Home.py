@@ -24,6 +24,7 @@ from Code.GUI.Workers import Worker
 class HomePage(QWidget):
     # 定义自定义信号：用于向 MainWindow 发送解析出来的 list[Pea]
     data_ready_signal = pyqtSignal(list)
+    sfc_ready_signal = pyqtSignal(list)
 
     def __init__(self, log_callback, parent=None):
         super().__init__(parent)
@@ -356,20 +357,28 @@ class HomePage(QWidget):
         ]
         
         # 获取非 aml 文件（如 .xml），用于日志记录
-        other_files = [f for f in self.selected_files if not f.lower().endswith('.aml')]
+        recipe_files = [
+            os.path.join(self.artifact_dir, f)
+            for f in self.selected_files
+            if f.lower().endswith('.xml')
+        ]
+        unsupported_files = [
+            f for f in self.selected_files
+            if not (f.lower().endswith('.aml') or f.lower().endswith('.xml'))
+        ]
 
         # 如果有非 MTP 文件，在日志里打个招呼
-        if other_files:
-            self.log_callback(f"Skipping non-MTP files: {', '.join(other_files)}")
+        if unsupported_files:
+            self.log_callback(f"Skipping unsupported files: {', '.join(unsupported_files)}")
 
         # 如果连一个 .aml 都没有选，直接结束
-        if not aml_files:
-            self.log_callback("No .aml files selected. Task aborted.")
+        if not aml_files and not recipe_files:
+            self.log_callback("No .aml or .xml files selected. Task aborted.")
             self.btn_run.setEnabled(True)
             return
 
         # 将过滤后的 aml_files 传给 Worker
-        self.worker = Worker(aml_files)         # 把 worker 对象挂在当前 HomePage 实例上，实例属性可以在任何时候创建，都会动态添加到对象，不需要提前声明。
+        self.worker = Worker(mtp_files=aml_files, recipe_files=recipe_files)
         self.worker.log_signal.connect(self.log_callback)
         self.worker.progress_signal.connect(self.set_progress)
         self.worker.finished_signal.connect(self.on_finished)       # 一旦 finished_signal 被发射（emit），请立刻自动执行 on_finished 这个函数。
@@ -387,7 +396,28 @@ class HomePage(QWidget):
         # print(parsed_mtps)
 
         failed_files = getattr(self.worker, 'failed_files', [])
+        sfc_results = getattr(self.worker, 'sfc_results', [])
+        failed_recipe_files = getattr(self.worker, 'failed_recipe_files', [])
+        total_mtp_files = getattr(self.worker, 'total_mtp_files', 0)
         self.data_ready_signal.emit(parsed_mtps)
+        self.sfc_ready_signal.emit(sfc_results)
+
+        if total_mtp_files == 0:
+            if sfc_results:
+                self.log_callback(f"SFC generated with {len(sfc_results)} elements.")
+            if failed_recipe_files:
+                failed_recipe_names = [os.path.basename(f) for f in failed_recipe_files]
+                warn_text = f"Failed to generate SFC from: {', '.join(failed_recipe_names)}"
+                self.log_callback(f"Warning: {warn_text}")
+                InfoBar.warning(
+                    title="Warning",
+                    content=warn_text,
+                    isClosable=True,
+                    duration=5000,
+                    parent=self.window(),
+                    position=InfoBarPosition.TOP_RIGHT
+                )
+            return
 
         if failed_files and parsed_mtps:
             failed_names = [os.path.basename(f) for f in failed_files]
@@ -420,6 +450,19 @@ class HomePage(QWidget):
             InfoBar.error(
                 title="Error",
                 content="No MTP file has data parsed to display.",
+                isClosable=True,
+                duration=5000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
+
+        if failed_recipe_files:
+            failed_recipe_names = [os.path.basename(f) for f in failed_recipe_files]
+            warn_text = f"Failed to generate SFC from: {', '.join(failed_recipe_names)}"
+            self.log_callback(f"Warning: {warn_text}")
+            InfoBar.warning(
+                title="Warning",
+                content=warn_text,
                 isClosable=True,
                 duration=5000,
                 parent=self.window(),

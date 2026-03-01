@@ -15,6 +15,7 @@ from qfluentwidgets import (
 from Code.GUI.Home import HomePage
 from Code.GUI.Logs import LogPage
 from Code.GUI.MTPViewer import MTPViewer
+from Code.GUI.SFCMonitor import SFCMonitor
 
 # Test git comment
 
@@ -29,9 +30,12 @@ class MainWindow(FluentWindow):
         # Pages
         self.log_page = LogPage(self)
         self.mtpviewer_page = MTPViewer(self)
+        self.sfcmonitor_page = SFCMonitor(self)
         self.home_page = HomePage(self.log_page.append_log, self)
         self.home_page.data_ready_signal.connect(self.mtpviewer_page.update_data)      # data_ready_signal emit后，先通过信号自动通知 viewer_page 更新界面，（由于self.data_ready_signal.emit(parsed_mtps)传递来了parsed_mtps，即执行update_data(parsed_mtps)）
         self.home_page.data_ready_signal.connect(self.switch_to_viewer)             # 后跳转
+        self.home_page.sfc_ready_signal.connect(self.sfcmonitor_page.update_data)
+        self.home_page.sfc_ready_signal.connect(self.switch_to_sfc)
 
         # Navigation 导航栏
         self.addSubInterface(
@@ -45,6 +49,13 @@ class MainWindow(FluentWindow):
             self.mtpviewer_page,
             FluentIcon.VIEW,    
             "MTP Viewer",     
+            NavigationItemPosition.TOP
+        )
+
+        self.addSubInterface(
+            self.sfcmonitor_page,
+            FluentIcon.APPLICATION,
+            "SFC Mointor",
             NavigationItemPosition.TOP
         )
 
@@ -64,6 +75,10 @@ class MainWindow(FluentWindow):
             self.switchTo(self.mtpviewer_page)
         else:
             pass
+
+    def switch_to_sfc(self, sfc_rows: list):
+        if len(sfc_rows) > 0:
+            self.switchTo(self.sfcmonitor_page)
 
 
     def center_on_screen(self):
