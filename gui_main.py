@@ -15,6 +15,7 @@ from Code.GUI.Home import HomePage
 from Code.GUI.Logs import LogPage
 from Code.GUI.MTPViewer import MTPViewer
 
+# Test git comment
 
 class MainWindow(FluentWindow):
     def __init__(self):
