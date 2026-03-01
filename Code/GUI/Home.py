@@ -5,7 +5,7 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QFont, QColor
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
-    QFileDialog, QTableWidgetItem, QProgressBar
+    QFileDialog, QTableWidgetItem, QProgressBar, QLabel
 )
 from qfluentwidgets import (
     CardWidget,
@@ -99,7 +99,19 @@ class HomePage(QWidget):
         layout.addWidget(self.btn_run)
 
         self.pbar = QProgressBar(self)
-        layout.addWidget(self.pbar)
+        self.pbar.setTextVisible(False)
+
+        self.pbar_percent = QLabel("0%", self)
+        self.pbar_percent.setStyleSheet("color: white;")
+        self.pbar_percent.setFixedWidth(40)
+        self.pbar_percent.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        pbar_row = QHBoxLayout()
+        pbar_row.setContentsMargins(0, 0, 0, 0)
+        pbar_row.setSpacing(8)
+        pbar_row.addWidget(self.pbar, 1)
+        pbar_row.addWidget(self.pbar_percent)
+        layout.addLayout(pbar_row)
 
         # Initial scan
         self.scan_artifact_dir()
@@ -333,7 +345,7 @@ class HomePage(QWidget):
             return
 
         self.btn_run.setEnabled(False)
-        self.pbar.setValue(0)
+        self.set_progress(0)
 
         # 【核心改动】：在这里进行过滤，只提取以 .aml 结尾的文件
         # 这样只有 MTP 文件会被送入后端 getMtps 函数
@@ -359,9 +371,14 @@ class HomePage(QWidget):
         # 将过滤后的 aml_files 传给 Worker
         self.worker = Worker(aml_files)         # 把 worker 对象挂在当前 HomePage 实例上，实例属性可以在任何时候创建，都会动态添加到对象，不需要提前声明。
         self.worker.log_signal.connect(self.log_callback)
-        self.worker.progress_signal.connect(self.pbar.setValue)
+        self.worker.progress_signal.connect(self.set_progress)
         self.worker.finished_signal.connect(self.on_finished)       # 一旦 finished_signal 被发射（emit），请立刻自动执行 on_finished 这个函数。
         self.worker.start()
+
+    def set_progress(self, value: int):
+        value = max(0, min(100, int(value)))
+        self.pbar.setValue(value)
+        self.pbar_percent.setText(f"{value}%")
 
     def on_finished(self):
         self.btn_run.setEnabled(True)
@@ -369,29 +386,44 @@ class HomePage(QWidget):
         parsed_mtps = getattr(self.worker, 'mtp_results', [])       # getattr(object, "属性名", 默认值)，取object.属性名
         # print(parsed_mtps)
 
-        if parsed_mtps:
-            self.data_ready_signal.emit(parsed_mtps)
+        failed_files = getattr(self.worker, 'failed_files', [])
+        self.data_ready_signal.emit(parsed_mtps)
+
+        if failed_files and parsed_mtps:
+            failed_names = [os.path.basename(f) for f in failed_files]
+            if len(failed_names) == 1:
+                warn_text = f"{failed_names[0]} has no data parsed to display."
+            else:
+                warn_text = f"{', '.join(failed_names)} have no data parsed to display."
+
+            self.log_callback(f"Warning: {warn_text}")
+            InfoBar.warning(
+                title="Warning",
+                content=warn_text,
+                isClosable=True,
+                duration=5000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
+        elif parsed_mtps:
             self.log_callback(f"Successfully sent {len(parsed_mtps)} MTPs to Viewer.")
-
             InfoBar.success(
-            title="Done",
-            content="Files imported successfully.",
-            isClosable=True,
-            duration = 3000,
-            parent=self.window(),
-            position=InfoBarPosition.TOP_RIGHT
-        )
+                title="Done",
+                content="Files imported successfully.",
+                isClosable=True,
+                duration=3000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
         else:
-            self.data_ready_signal.emit(parsed_mtps)
-            self.log_callback("Error: At least one MTP file has no data parsed to display.")
-
+            self.log_callback("Error: No MTP file has data parsed to display.")
             InfoBar.error(
-            title="Error",
-            content="At least one MTP file has no data parsed to display.",
-            isClosable=True,
-            duration = 5000,
-            parent=self.window(),
-            position=InfoBarPosition.TOP_RIGHT
-        )
+                title="Error",
+                content="No MTP file has data parsed to display.",
+                isClosable=True,
+                duration=5000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
             
         

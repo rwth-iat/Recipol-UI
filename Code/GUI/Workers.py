@@ -1,10 +1,8 @@
 # Code/GUI/Workers.py
-import time
-
 from PyQt6.QtCore import QThread, pyqtSignal
 
-# 引入后端函数
 from Code.Recipol.mtpparser import getMtps
+
 
 class Worker(QThread):
     log_signal = pyqtSignal(str)
@@ -13,33 +11,51 @@ class Worker(QThread):
 
     def __init__(self, files):
         super().__init__()
-        self.files = files  # 文件绝对路径列表
+        self.files = files  # Absolute file path list selected in UI
         self.mtp_results = []
+        self.failed_files = []
 
     def run(self):
-        self.mtp_results = [] # 每次运行前清空结果
-        # total = len(self.files)
-        # for i, file in enumerate(self.files):
-        #     # 模拟处理文件
-        #     self.log_signal.emit(f"Processing: {file}")
-        #     # getMtps()
-        #     time.sleep(1)  # 这里换成真实处理逻辑
+        self.mtp_results = []
+        self.failed_files = []
+        total_files = len(self.files)
+        success_files = 0
 
-        #     # 更新进度条
-        #     self.progress_signal.emit(int((i+1)/total*100))
-        try:
-            self.log_signal.emit("Starting batch processing of MTP tasks...")
-            self.progress_signal.emit(20)
+        if total_files == 0:
+            self.progress_signal.emit(0)
+            self.log_signal.emit("No MTP files to process.")
+            self.finished_signal.emit()
+            return
 
-            # 调用后端，传入 UI 选中的文件
-            # 这里的 self.files 就是你在 Home.py 里勾选的那些 .aml 文件
-            self.mtp_results = getMtps(input_files=self.files, logger=self.log_signal.emit)     # 获取list[Pea]
+        self.log_signal.emit("Starting batch processing of MTP tasks...")
 
-            self.progress_signal.emit(100)
-            self.log_signal.emit(f"Task completed. Processed {len(self.mtp_results)} modules in total.")
-            
-        except Exception as e:
-            self.progress_signal.emit(100)
-            self.log_signal.emit(f"Worker crashed during execution: {str(e)}")
+        for idx, file in enumerate(self.files, start=1):
+            try:
+                self.log_signal.emit(f"Processing ({idx}/{total_files}): {file}")
+                parsed = getMtps(input_files=[file], logger=self.log_signal.emit)
 
+                if parsed:
+                    # Count one file as success when at least one module is parsed.
+                    self.mtp_results.extend(parsed)
+                    success_files += 1
+                    self.log_signal.emit(f"Success: {file}")
+                else:
+                    self.failed_files.append(file)
+                    self.log_signal.emit(f"No valid MTP data parsed from: {file}")
+            except Exception as e:
+                self.failed_files.append(file)
+                self.log_signal.emit(f"Failed to process {file}: {str(e)}")
+
+            # Progress is based on successful files only.
+            self.progress_signal.emit(int(success_files / total_files * 100))
+
+        if self.failed_files:
+            self.log_signal.emit(
+                f"Completed with issues: {success_files}/{total_files} files succeeded, "
+                f"{len(self.failed_files)} failed."
+            )
+        else:
+            self.log_signal.emit(f"Completed: all {total_files} files succeeded.")
+
+        self.log_signal.emit(f"Task completed. Parsed {len(self.mtp_results)} modules in total.")
         self.finished_signal.emit()
