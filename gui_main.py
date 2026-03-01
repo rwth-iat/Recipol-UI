@@ -71,8 +71,13 @@ class MainWindow(FluentWindow):
         if not screen:
             return
         geo = screen.availableGeometry()
+        vertical_margin = 24
+        max_height = max(300, geo.height() - vertical_margin * 2)
+        if self.height() > max_height:
+            self.resize(self.width(), max_height)
         x = geo.x() + (geo.width() - self.width()) // 2
         y = geo.y() + (geo.height() - self.height()) // 2
+        y = max(geo.y() + vertical_margin, y)
         self.move(x, y)
 
 

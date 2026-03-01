@@ -80,6 +80,9 @@ class HomePage(QWidget):
         self.table.setSelectionMode(TableWidget.SelectionMode.MultiSelection)
         self.table.itemSelectionChanged.connect(self.on_selection_changed)
         self.table.horizontalHeader().setStretchLastSection(True)
+        self.table.horizontalHeader().setDefaultAlignment(
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+        )
 
         layout.addWidget(self.table, 1)
 
@@ -172,6 +175,7 @@ class HomePage(QWidget):
         file_item = QTableWidgetItem(os.path.basename(path))
         file_item.setToolTip(path)  # Full path tooltip
         file_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
+        file_item.setTextAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         self.table.setItem(row, 1, file_item)
 
         self.table.setRowHeight(row, 24)
