@@ -1,0 +1,2 @@
+1. Fixed: empty/wrong-formatted file processing at MTP viewer.
+2. Fixed: sensor/actuator as parameters of procedures added and displayed in MTP Viewer
