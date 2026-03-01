@@ -216,7 +216,8 @@ class SFCMonitor(QWidget):
                 txt.setFont(self._font_step)
                 txt.setTextWidth(260)
                 opt = txt.document().defaultTextOption()
-                opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+                # Use word-boundary wrapping so "Step <id>" stays together.
+                opt.setWrapMode(QTextOption.WrapMode.WordWrap)
                 txt.document().setDefaultTextOption(opt)
                 txt.setDefaultTextColor(QColor("#f9f9f9"))
                 self.scene.addItem(txt)
