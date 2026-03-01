@@ -195,7 +195,7 @@ class SFCMonitor(QWidget):
             return
         self.view.resetTransform()
         viewport_w = max(1, self.view.viewport().width())
-        scale_x = (viewport_w * 0.80) / rect.width()
+        scale_x = (viewport_w * 0.90) / rect.width()
         self.view.scale(scale_x, scale_x)
         self.view.centerOn(rect.center())
         self._position_zoom_controls()
@@ -213,8 +213,11 @@ class SFCMonitor(QWidget):
             cond = str(row.get("condition", "")).strip()
             if cond:
                 txt = QGraphicsTextItem(cond)
-                txt.setFont(self._font_sub)
+                txt.setFont(self._font_step)
                 txt.setTextWidth(260)
+                opt = txt.document().defaultTextOption()
+                opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
+                txt.document().setDefaultTextOption(opt)
                 txt.setDefaultTextColor(QColor("#f9f9f9"))
                 self.scene.addItem(txt)
                 txt.setPos(rect.right() + 12, rect.center().y() - 10)
