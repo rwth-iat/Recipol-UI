@@ -3,6 +3,7 @@
 
 import sys
 from PyQt6.QtWidgets import QApplication
+from PyQt6.QtGui import QGuiApplication, QCursor
 from qfluentwidgets import (
     FluentWindow,
     FluentIcon,
@@ -55,6 +56,7 @@ class MainWindow(FluentWindow):
         )
 
         self.switchTo(self.home_page)
+        self.center_on_screen()
     
     def switch_to_viewer(self, mtps: list):
         """当收到数据准备好的信号时，切换到 MTP Viewer 页面"""
@@ -62,6 +64,16 @@ class MainWindow(FluentWindow):
             self.switchTo(self.mtpviewer_page)
         else:
             pass
+
+
+    def center_on_screen(self):
+        screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
+        if not screen:
+            return
+        geo = screen.availableGeometry()
+        x = geo.x() + (geo.width() - self.width()) // 2
+        y = geo.y() + (geo.height() - self.height()) // 2
+        self.move(x, y)
 
 
 if __name__ == "__main__":
