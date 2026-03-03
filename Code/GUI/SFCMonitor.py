@@ -35,14 +35,14 @@ class SFCGraphicsView(QGraphicsView):
 class SFCMonitor(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent=parent)
-        self.setObjectName("SFCMonitor")
+        self.setObjectName("RecipeMonitor")
         self.sfc_rows = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(16)
 
-        self.title = TitleLabel("SFC Monitor", self)
+        self.title = TitleLabel("Recipe Monitor", self)
         self.subtitle = SubtitleLabel("Sequential Function Chart", self)
         layout.addWidget(self.title)
         layout.addWidget(self.subtitle)
