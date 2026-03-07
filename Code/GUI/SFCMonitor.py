@@ -369,6 +369,7 @@ class SFCMonitor(QWidget):
             node_item = self._add_draggable_node_rect(rect, self._pen_trans, self._brush_trans)
             cond = str(row.get("condition", "")).strip()
             cond = re.sub(r"\bStep\s+([^\s]+)", lambda m: f"Step\u00A0{m.group(1)}", cond)
+            cond = re.sub(r"\s+is\s+", "\u00A0is\u00A0", cond)
             if cond:
                 txt = QGraphicsTextItem(cond, node_item)
                 txt.setFont(self._font_step)
