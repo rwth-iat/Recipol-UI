@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import SubtitleLabel, TitleLabel
+from qfluentwidgets import CardWidget, ComboBox, FluentIcon, SubtitleLabel, TitleLabel
 
 
 class SFCGraphicsView(QGraphicsView):
@@ -37,6 +37,7 @@ class SFCMonitor(QWidget):
         super().__init__(parent=parent)
         self.setObjectName("RecipeMonitor")
         self.sfc_rows = []
+        self.recipe_groups = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
@@ -46,6 +47,16 @@ class SFCMonitor(QWidget):
         self.subtitle = SubtitleLabel("Sequential Function Chart", self)
         layout.addWidget(self.title)
         layout.addWidget(self.subtitle)
+
+        self.selection_card = CardWidget(self)
+        self.selection_layout = QHBoxLayout(self.selection_card)
+        self.recipe_combo = ComboBox(self)
+        self.recipe_combo.setPlaceholderText("Select a recipe to view")
+        self.recipe_combo.setMinimumWidth(320)
+        self.recipe_combo.currentIndexChanged.connect(self._on_recipe_changed)
+        self.selection_layout.addWidget(self.recipe_combo)
+        self.selection_layout.addStretch(1)
+        layout.addWidget(self.selection_card)
 
         self.scene = QGraphicsScene(self)
         self.view = SFCGraphicsView(self)
@@ -68,15 +79,54 @@ class SFCMonitor(QWidget):
 
     def update_data(self, sfc_rows: list):
         self.sfc_rows = sorted((sfc_rows or []), key=lambda x: x.get("seq", 0))
-        self.scene.clear()
+        self.recipe_groups = []
+
+        self.recipe_combo.blockSignals(True)
+        self.recipe_combo.clear()
 
         if not self.sfc_rows:
+            self.recipe_combo.setPlaceholderText("No SFC data to display")
+            self.recipe_combo.blockSignals(False)
+            self._render_rows([])
+            return
+
+        self.recipe_combo.setPlaceholderText("Select a recipe to view")
+        grouped: dict[str, list[dict]] = {}
+        for row in self.sfc_rows:
+            recipe_name = str(row.get("recipe", "Unknown Recipe"))
+            grouped.setdefault(recipe_name, []).append(row)
+
+        self.recipe_groups = list(grouped.items())
+        for recipe_name, _ in self.recipe_groups:
+            self.recipe_combo.addItem(recipe_name, icon=FluentIcon.DOCUMENT)
+
+        self.recipe_combo.blockSignals(False)
+
+        if self.recipe_combo.count() > 0:
+            self.recipe_combo.setCurrentIndex(0)
+            self._on_recipe_changed(0)
+        else:
+            self._render_rows([])
+
+
+    def _on_recipe_changed(self, index: int):
+        if index < 0 or index >= len(self.recipe_groups):
+            self._render_rows([])
+            return
+        _, rows = self.recipe_groups[index]
+        self._render_rows(rows)
+
+    def _render_rows(self, rows: list[dict]):
+        self.scene.clear()
+
+        if not rows:
             txt = self.scene.addText("No SFC data to display", self._font_main)
             txt.setDefaultTextColor(QColor("#ffffff"))
             txt.setPos(24, 20)
+            self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-30, -20, 120, 40))
             return
 
-        levels = self._build_levels(self.sfc_rows)
+        levels = self._build_levels(rows)
         self._draw_levels(levels)
         # Make initial view identical to pressing Reset once after render.
         QTimer.singleShot(0, self._fit_to_width_80)

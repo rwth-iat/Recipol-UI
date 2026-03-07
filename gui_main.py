@@ -77,7 +77,7 @@ class MainWindow(FluentWindow):
             pass
 
     def switch_to_sfc(self, sfc_rows: list):
-        if len(sfc_rows) > 0 and self.home_page.last_run_single_xml_only:
+        if len(sfc_rows) > 0:
             self.switchTo(self.sfcmonitor_page)
 
 
