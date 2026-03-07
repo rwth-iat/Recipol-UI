@@ -77,7 +77,7 @@ class MainWindow(FluentWindow):
             pass
 
     def switch_to_sfc(self, sfc_rows: list):
-        if len(sfc_rows) > 0:
+        if len(sfc_rows) > 0 and not self.home_page.last_run_has_aml:
             self.switchTo(self.sfcmonitor_page)
 
 

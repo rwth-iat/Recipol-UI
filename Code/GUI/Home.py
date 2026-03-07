@@ -33,6 +33,7 @@ class HomePage(QWidget):
         self.log_callback = log_callback
         self.selected_file = ""
         self.selected_files = []
+        self.last_run_has_aml = False
 
         # --------------------------------------------------
         # Artifact directory (project-root based)
@@ -376,6 +377,7 @@ class HomePage(QWidget):
             for f in self.selected_files 
             if f.lower().endswith('.aml')
         ]
+        self.last_run_has_aml = len(aml_files) > 0
         
         # 获取非 aml 文件（如 .xml），用于日志记录
         recipe_files = [

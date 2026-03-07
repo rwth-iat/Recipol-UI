@@ -38,6 +38,8 @@ class SFCMonitor(QWidget):
         self.setObjectName("RecipeMonitor")
         self.sfc_rows = []
         self.recipe_groups = []
+        self._start_step_seq = None
+        self._end_step_seq = None
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
@@ -118,6 +120,8 @@ class SFCMonitor(QWidget):
 
     def _render_rows(self, rows: list[dict]):
         self.scene.clear()
+        self._start_step_seq = None
+        self._end_step_seq = None
 
         if not rows:
             txt = self.scene.addText("No SFC data to display", self._font_main)
@@ -125,6 +129,11 @@ class SFCMonitor(QWidget):
             txt.setPos(24, 20)
             self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-30, -20, 120, 40))
             return
+
+        step_seqs = [row.get("seq") for row in rows if str(row.get("kind", "")).lower() == "step"]
+        if step_seqs:
+            self._start_step_seq = step_seqs[0]
+            self._end_step_seq = step_seqs[-1]
 
         levels = self._build_levels(rows)
         self._draw_levels(levels)
@@ -277,9 +286,15 @@ class SFCMonitor(QWidget):
                 txt.setPos(rect.right() + 12, rect.center().y() - 10)
         else:
             self.scene.addRect(rect, self._pen_step, self._brush_step)
-            name = str(row.get("name", "")).strip()
-            proc = str(row.get("procedure", "")).strip()
-            label = name if not proc else f"{name}\nProc: {proc}"
+            seq = row.get("seq")
+            if seq == self._start_step_seq:
+                label = "Init"
+            elif seq == self._end_step_seq:
+                label = "End"
+            else:
+                name = str(row.get("name", "")).strip()
+                proc = str(row.get("procedure", "")).strip()
+                label = name if not proc else f"{name}\nProc: {proc}"
             txt = QGraphicsTextItem(label)
             txt.setFont(self._font_step)
             txt.setTextWidth(rect.width() - 16)
