@@ -296,6 +296,7 @@ class HomePage(QWidget):
         self.selected_file = ""
         self.selected_files = []
         self.lbl_selected.setText("Selected: None")
+        self.set_progress(0)
         self.btn_run.setEnabled(False)
         self.btn_delete.setEnabled(False)
         self.btn_reset_selection.setEnabled(False)
