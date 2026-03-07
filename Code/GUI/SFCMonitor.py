@@ -2,10 +2,13 @@
 # -*- coding: utf-8 -*-
 
 import math
+import re
 
 from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF, QTextOption
 from PyQt6.QtWidgets import (
+    QGraphicsItem,
+    QGraphicsRectItem,
     QGraphicsTextItem,
     QGraphicsScene,
     QGraphicsView,
@@ -30,6 +33,88 @@ class SFCGraphicsView(QGraphicsView):
         else:
             self.scale(1 / 1.12, 1 / 1.12)
         event.accept()
+
+
+class DraggableNodeItem(QGraphicsRectItem):
+    def __init__(self, rect: QRectF):
+        super().__init__(rect)
+        self._edges = []
+
+    def add_edge(self, edge):
+        self._edges.append(edge)
+
+    def itemChange(self, change, value):
+        if change == QGraphicsItem.GraphicsItemChange.ItemPositionHasChanged:
+            for edge in self._edges:
+                edge.update()
+        return super().itemChange(change, value)
+
+
+class SFCEdge:
+    def __init__(self, start_node: DraggableNodeItem, end_node: DraggableNodeItem, scene: QGraphicsScene, pen: QPen):
+        self.start_node = start_node
+        self.end_node = end_node
+        self.scene = scene
+        self.pen = pen
+        self.segments = []
+        self.arrow_item = self.scene.addPolygon(QPolygonF(), self.pen, QBrush(self.pen.color()))
+
+    def _set_segment_count(self, count: int):
+        while len(self.segments) < count:
+            self.segments.append(self.scene.addLine(0, 0, 0, 0, self.pen))
+        while len(self.segments) > count:
+            item = self.segments.pop()
+            self.scene.removeItem(item)
+
+    def update(self):
+        start_rect = self.start_node.sceneBoundingRect()
+        end_rect = self.end_node.sceneBoundingRect()
+        start = QPointF(start_rect.center().x(), start_rect.bottom())
+        end = QPointF(end_rect.center().x(), end_rect.top())
+
+        clear = 18.0
+        if end.y() >= start.y():
+            mid_y = start.y() + clear
+            points = [
+                start,
+                QPointF(start.x(), mid_y),
+                QPointF(end.x(), mid_y),
+                end,
+            ]
+        else:
+            side_x = (start_rect.center().x() + end_rect.center().x()) / 2.0
+            y1 = start.y() + clear
+            y2 = end.y() - clear
+            points = [
+                start,
+                QPointF(start.x(), y1),
+                QPointF(side_x, y1),
+                QPointF(side_x, y2),
+                QPointF(end.x(), y2),
+                end,
+            ]
+
+        self._set_segment_count(max(0, len(points) - 1))
+        for i, (p1, p2) in enumerate(zip(points, points[1:])):
+            self.segments[i].setLine(p1.x(), p1.y(), p2.x(), p2.y())
+
+        p_last = points[-2]
+        p_end = points[-1]
+        dx = p_end.x() - p_last.x()
+        dy = p_end.y() - p_last.y()
+        length = math.hypot(dx, dy)
+        if length < 1e-6:
+            self.arrow_item.setPolygon(QPolygonF())
+            return
+
+        ux, uy = dx / length, dy / length
+        head_len = 10.0
+        head_w = 6.0
+        tip = p_end
+        base = QPointF(p_end.x() - ux * head_len, p_end.y() - uy * head_len)
+        left = QPointF(base.x() - uy * head_w, base.y() + ux * head_w)
+        right = QPointF(base.x() + uy * head_w, base.y() - ux * head_w)
+        self.arrow_item.setPolygon(QPolygonF([tip, left, right]))
 
 
 class SFCMonitor(QWidget):
@@ -179,10 +264,11 @@ class SFCMonitor(QWidget):
             max_h = 0.0
             for row, (w, h) in zip(level, size_list):
                 rect = QRectF(x, y, w, h)
-                self._draw_node(row, rect)
-                top = QPointF(rect.center().x(), rect.top())
-                bottom = QPointF(rect.center().x(), rect.bottom())
-                level_anchors.append({"top": top, "bottom": bottom, "rect": rect})
+                node_item = self._draw_node(row, rect)
+                node_rect = node_item.sceneBoundingRect()
+                top = QPointF(node_rect.center().x(), node_rect.top())
+                bottom = QPointF(node_rect.center().x(), node_rect.bottom())
+                level_anchors.append({"top": top, "bottom": bottom, "node": node_item})
                 max_h = max(max_h, h)
                 x += w + x_gap
 
@@ -190,10 +276,8 @@ class SFCMonitor(QWidget):
                 for prev in prev_anchors:
                     for curr in level_anchors:
                         self._draw_arrow_orthogonal(
-                            prev["bottom"],
-                            curr["top"],
-                            prev["rect"],
-                            curr["rect"],
+                            prev["node"],
+                            curr["node"],
                         )
 
             prev_anchors = level_anchors
@@ -268,24 +352,36 @@ class SFCMonitor(QWidget):
         # Step box enlarged to ~1.3x.
         return 312.0, 112.0
 
+    def _add_draggable_node_rect(self, rect: QRectF, pen: QPen, brush: QBrush) -> DraggableNodeItem:
+        item = DraggableNodeItem(QRectF(0, 0, rect.width(), rect.height()))
+        item.setPen(pen)
+        item.setBrush(brush)
+        item.setPos(rect.left(), rect.top())
+        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsMovable, True)
+        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemIsSelectable, True)
+        item.setFlag(QGraphicsItem.GraphicsItemFlag.ItemSendsGeometryChanges, True)
+        self.scene.addItem(item)
+        return item
+
     def _draw_node(self, row: dict, rect: QRectF):
         kind = str(row.get("kind", ""))
         if kind.lower() == "transition":
-            self.scene.addRect(rect, self._pen_trans, self._brush_trans)
+            node_item = self._add_draggable_node_rect(rect, self._pen_trans, self._brush_trans)
             cond = str(row.get("condition", "")).strip()
+            cond = re.sub(r"\bStep\s+([^\s]+)", lambda m: f"Step\u00A0{m.group(1)}", cond)
             if cond:
-                txt = QGraphicsTextItem(cond)
+                txt = QGraphicsTextItem(cond, node_item)
                 txt.setFont(self._font_step)
-                txt.setTextWidth(260)
+                txt.setTextWidth(150)
                 opt = txt.document().defaultTextOption()
                 # Use word-boundary wrapping so "Step <id>" stays together.
                 opt.setWrapMode(QTextOption.WrapMode.WordWrap)
                 txt.document().setDefaultTextOption(opt)
                 txt.setDefaultTextColor(QColor("#f9f9f9"))
-                self.scene.addItem(txt)
-                txt.setPos(rect.right() + 12, rect.center().y() - 10)
+                txt.setPos(node_item.rect().width() + 12, node_item.rect().height() / 2 - 10)
+            return node_item
         else:
-            self.scene.addRect(rect, self._pen_step, self._brush_step)
+            node_item = self._add_draggable_node_rect(rect, self._pen_step, self._brush_step)
             seq = row.get("seq")
             if seq == self._start_step_seq:
                 label = "Init"
@@ -295,64 +391,26 @@ class SFCMonitor(QWidget):
                 name = str(row.get("name", "")).strip()
                 proc = str(row.get("procedure", "")).strip()
                 label = name if not proc else f"{name}\nProc: {proc}"
-            txt = QGraphicsTextItem(label)
+            txt = QGraphicsTextItem(label, node_item)
             txt.setFont(self._font_step)
-            txt.setTextWidth(rect.width() - 16)
+            txt.setTextWidth(node_item.rect().width() - 16)
             opt = txt.document().defaultTextOption()
             opt.setAlignment(Qt.AlignmentFlag.AlignCenter)
             opt.setWrapMode(QTextOption.WrapMode.WrapAtWordBoundaryOrAnywhere)
             txt.document().setDefaultTextOption(opt)
             txt.setDefaultTextColor(QColor("#ffffff"))
-            self.scene.addItem(txt)
             br = txt.boundingRect()
             txt.setPos(
-                rect.center().x() - br.width() / 2,
-                rect.center().y() - br.height() / 2,
+                node_item.rect().width() / 2 - br.width() / 2,
+                node_item.rect().height() / 2 - br.height() / 2,
             )
+            return node_item
 
-    def _draw_arrow_orthogonal(self, start: QPointF, end: QPointF, start_rect: QRectF, end_rect: QRectF):
-        clear = 18.0
-        if end.y() >= start.y():
-            mid_y = start.y() + clear
-            points = [
-                start,
-                QPointF(start.x(), mid_y),
-                QPointF(end.x(), mid_y),
-                end,
-            ]
-        else:
-            # Wrapped to next column: route at the middle x between the two columns.
-            side_x = (start_rect.center().x() + end_rect.center().x()) / 2.0
-            y1 = start.y() + clear
-            y2 = end.y() - clear
-            points = [
-                start,
-                QPointF(start.x(), y1),
-                QPointF(side_x, y1),
-                QPointF(side_x, y2),
-                QPointF(end.x(), y2),
-                end,
-            ]
-
-        for p1, p2 in zip(points, points[1:]):
-            self.scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), self._pen_line)
-
-        p_last = points[-2]
-        p_end = points[-1]
-        dx = p_end.x() - p_last.x()
-        dy = p_end.y() - p_last.y()
-        length = math.hypot(dx, dy)
-        if length < 1e-6:
-            return
-        ux, uy = dx / length, dy / length
-        head_len = 10.0
-        head_w = 6.0
-        tip = p_end
-        base = QPointF(p_end.x() - ux * head_len, p_end.y() - uy * head_len)
-        left = QPointF(base.x() - uy * head_w, base.y() + ux * head_w)
-        right = QPointF(base.x() + uy * head_w, base.y() - ux * head_w)
-        tri = QPolygonF([tip, left, right])
-        self.scene.addPolygon(tri, self._pen_line, QBrush(self._pen_line.color()))
+    def _draw_arrow_orthogonal(self, start_node: DraggableNodeItem, end_node: DraggableNodeItem):
+        edge = SFCEdge(start_node=start_node, end_node=end_node, scene=self.scene, pen=self._pen_line)
+        start_node.add_edge(edge)
+        end_node.add_edge(edge)
+        edge.update()
 
     def showEvent(self, event):
         super().showEvent(event)
