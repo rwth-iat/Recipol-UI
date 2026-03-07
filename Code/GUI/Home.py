@@ -33,6 +33,7 @@ class HomePage(QWidget):
         self.log_callback = log_callback
         self.selected_file = ""
         self.selected_files = []
+        self.last_run_single_xml_only = False
 
         # --------------------------------------------------
         # Artifact directory (project-root based)
@@ -383,6 +384,22 @@ class HomePage(QWidget):
             for f in self.selected_files
             if f.lower().endswith('.xml')
         ]
+        selected_recipe_count = len(recipe_files)
+        self.last_run_single_xml_only = (len(aml_files) == 0 and selected_recipe_count == 1)
+
+        if selected_recipe_count > 1:
+            first_recipe_name = os.path.basename(recipe_files[0])
+            warn_text = f"Multiple XML files selected. Only the first selected XML will be displayed: {first_recipe_name}"
+            self.log_callback(f"Warning: {warn_text}")
+            InfoBar.warning(
+                title="Warning",
+                content=warn_text,
+                isClosable=True,
+                duration=5000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
+            recipe_files = recipe_files[:1]
         unsupported_files = [
             f for f in self.selected_files
             if not (f.lower().endswith('.aml') or f.lower().endswith('.xml'))
@@ -394,6 +411,7 @@ class HomePage(QWidget):
 
         # 如果连一个 .aml 都没有选，直接结束
         if not aml_files and not recipe_files:
+            self.last_run_single_xml_only = False
             self.log_callback("No .aml or .xml files selected. Task aborted.")
             self.btn_run.setEnabled(True)
             return
