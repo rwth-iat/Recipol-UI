@@ -55,7 +55,7 @@ class MainWindow(FluentWindow):
         self.addSubInterface(
             self.sfcmonitor_page,
             FluentIcon.APPLICATION,
-            "SFC Mointor",
+            "Recipe Monitor",
             NavigationItemPosition.TOP
         )
 

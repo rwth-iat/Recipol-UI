@@ -354,6 +354,10 @@ class SFCMonitor(QWidget):
         tri = QPolygonF([tip, left, right])
         self.scene.addPolygon(tri, self._pen_line, QBrush(self._pen_line.color()))
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        QTimer.singleShot(0, self._fit_to_width_80)
+
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._position_zoom_controls()
