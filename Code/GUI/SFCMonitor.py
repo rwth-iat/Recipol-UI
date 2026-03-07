@@ -372,7 +372,7 @@ class SFCMonitor(QWidget):
             if cond:
                 txt = QGraphicsTextItem(cond, node_item)
                 txt.setFont(self._font_step)
-                txt.setTextWidth(150)
+                txt.setTextWidth(100)
                 opt = txt.document().defaultTextOption()
                 # Use word-boundary wrapping so "Step <id>" stays together.
                 opt.setWrapMode(QTextOption.WrapMode.WordWrap)
