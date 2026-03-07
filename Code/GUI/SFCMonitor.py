@@ -195,8 +195,11 @@ class SFCMonitor(QWidget):
             return
         self.view.resetTransform()
         viewport_w = max(1, self.view.viewport().width())
-        scale_x = (viewport_w * 0.90) / rect.width()
-        self.view.scale(scale_x, scale_x)
+        viewport_h = max(1, self.view.viewport().height())
+        scale_x = (viewport_w * 0.90) / max(1.0, rect.width())
+        scale_y = (viewport_h * 0.90) / max(1.0, rect.height())
+        scale = min(scale_x, scale_y)
+        self.view.scale(scale, scale)
         self.view.centerOn(rect.center())
         self._position_zoom_controls()
 
