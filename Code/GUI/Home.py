@@ -385,7 +385,7 @@ class HomePage(QWidget):
             if f.lower().endswith('.xml')
         ]
         selected_recipe_count = len(recipe_files)
-        self.last_run_single_xml_only = (len(aml_files) == 0 and selected_recipe_count == 1)
+        self.last_run_single_xml_only = (len(aml_files) == 0 and selected_recipe_count >= 1)
 
         if selected_recipe_count > 1:
             first_recipe_name = os.path.basename(recipe_files[0])
