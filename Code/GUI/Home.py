@@ -32,6 +32,7 @@ class HomePage(QWidget):
 
         self.log_callback = log_callback
         self.selected_file = ""
+        self.selected_files = []
 
         # --------------------------------------------------
         # Artifact directory (project-root based)
@@ -65,8 +66,13 @@ class HomePage(QWidget):
         self.btn_delete.setEnabled(False)
         self.btn_delete.clicked.connect(self.delete_selected_file)
 
+        self.btn_reset_selection = PushButton("Reset Selection", self)
+        self.btn_reset_selection.setEnabled(False)
+        self.btn_reset_selection.clicked.connect(self.reset_selection)
+
         card_layout.addWidget(btn_import)
         card_layout.addWidget(self.btn_delete)
+        card_layout.addWidget(self.btn_reset_selection)
         card_layout.addStretch(1)
 
 
@@ -255,9 +261,11 @@ class HomePage(QWidget):
         items = self.table.selectedItems()
         if not items:
             self.selected_file = ""
+            self.selected_files = []
             self.lbl_selected.setText("Selected: None")
             self.btn_run.setEnabled(False)
             self.btn_delete.setEnabled(False)
+            self.btn_reset_selection.setEnabled(False)
             return
 
         # 收集所有选中的真实文件（忽略组标题和空行）
@@ -268,9 +276,11 @@ class HomePage(QWidget):
 
         if not selected_files:
             self.selected_file = ""
+            self.selected_files = []
             self.lbl_selected.setText("Selected: None")
             self.btn_run.setEnabled(False)
             self.btn_delete.setEnabled(False)
+            self.btn_reset_selection.setEnabled(False)
             return
 
         self.selected_files = selected_files  # 保存所有选中文件
@@ -278,6 +288,17 @@ class HomePage(QWidget):
         # self.btn_run.setEnabled(len(selected_files) == 1)  # 运行Worker只允许单选
         self.btn_run.setEnabled(True)    # 多选时也可运行 Worker
         self.btn_delete.setEnabled(True)
+        self.btn_reset_selection.setEnabled(True)
+
+
+    def reset_selection(self):
+        self.table.clearSelection()
+        self.selected_file = ""
+        self.selected_files = []
+        self.lbl_selected.setText("Selected: None")
+        self.btn_run.setEnabled(False)
+        self.btn_delete.setEnabled(False)
+        self.btn_reset_selection.setEnabled(False)
 
 
     # ------------------------------------------------------------------
@@ -287,6 +308,7 @@ class HomePage(QWidget):
         if not hasattr(self, "selected_files") or not self.selected_files:
             return
 
+        deleted_count = len(self.selected_files)
         failed = []
         for fname in self.selected_files:
             full_path = os.path.join(self.artifact_dir, fname)
@@ -300,9 +322,7 @@ class HomePage(QWidget):
 
         # 更新表格
         self.scan_artifact_dir()
-        self.lbl_selected.setText("Selected: None")
-        self.btn_run.setEnabled(False)
-        self.btn_delete.setEnabled(False)
+        self.reset_selection()
 
         if failed:
             InfoBar.error(
@@ -314,7 +334,7 @@ class HomePage(QWidget):
         else:
             InfoBar.success(
                 title="Deleted",
-                content=f"Deleted {len(self.selected_files)} file(s)",
+                content=f"Deleted {deleted_count} file(s)",
                 parent=self.window(),
                 position=InfoBarPosition.TOP_RIGHT
             )
