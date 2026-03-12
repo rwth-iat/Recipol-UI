@@ -245,6 +245,7 @@ class Pea:
         self.ns = "" # namespace of the opc ua server
         self.nsid = None # index of the opc namespace
         self.hmis:list[HMI] = [] # list of the hmi representation(s) of the PEA
+        self.source_file = "" # source AML file path
 
     def __str__(self):
         descr = f"{self.name}\nInstances:"

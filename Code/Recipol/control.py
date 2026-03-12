@@ -371,11 +371,20 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         # fetch service, procedure and parameters
                         global url
                         global ns
-                        if url != p['mtp'].url:
+                        if p.get('mtp') is None:
+                            raise ConnectionError("OPC UA Connection Failed: no MTP mapping for step.")
+
+                        src_file = getattr(p['mtp'], "source_file", "")
+                        nsid = p["mtp"].nsid
+                        if url != p['mtp'].url or nsid is None:
                             url = p['mtp'].url
                             ns = p['mtp'].ns
                             if p["mtp"].nsid is None:
-                                p["mtp"].nsid = asyncio.run(getNamespaceId(opcurl=url, ns=ns))
+                                try:
+                                    p["mtp"].nsid = asyncio.run(getNamespaceId(opcurl=url, ns=ns))
+                                except Exception as e:
+                                    detail = f"source={src_file}, url={url}, ns={ns}" if src_file or url or ns else str(e)
+                                    raise ConnectionError(f"OPC UA Connection Failed: {detail}") from e
                             nsid = p["mtp"].nsid
                             #ns = asyncio.run(getNamespace(opcurl=url))
                         service:mtp.Service = p['mtp'].getService(p['inst'].serviceId)

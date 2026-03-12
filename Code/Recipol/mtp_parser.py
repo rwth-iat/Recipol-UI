@@ -48,6 +48,7 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
 
         # create mtp object
         mtp = Pea()
+        mtp.source_file = str(file)
         mtps.append(mtp)
 
         # parse mtp

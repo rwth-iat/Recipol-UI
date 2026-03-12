@@ -22,7 +22,7 @@ from PyQt6.QtWidgets import (
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import CardWidget, ComboBox, FluentIcon, SubtitleLabel, TitleLabel, PrimaryPushButton
+from qfluentwidgets import CardWidget, ComboBox, FluentIcon, SubtitleLabel, TitleLabel, PrimaryPushButton, InfoBar, InfoBarPosition
 
 class ControlRunner(QObject):
     input_requested = pyqtSignal(str)
@@ -398,6 +398,15 @@ class SFCMonitor(QWidget):
             self._control_runner.provide_input(text)
 
     def _handle_control_error(self, traceback_text: str):
+        if "OPC UA Connection Failed" in traceback_text or "TimeoutError" in traceback_text or "connect_socket" in traceback_text:
+            InfoBar.error(
+                title="OPC UA Connection Failed",
+                content="",
+                duration=5000,
+                parent=self.window(),
+                position=InfoBarPosition.TOP_RIGHT
+            )
+
         dialog = QDialog(self)
         dialog.setWindowTitle("Execute Recipe")
         dialog.setMinimumWidth(640)
