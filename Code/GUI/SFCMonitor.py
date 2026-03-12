@@ -28,15 +28,16 @@ class ControlRunner(QObject):
     input_requested = pyqtSignal(str)
     finished = pyqtSignal()
     error = pyqtSignal(str)
+    log_signal = pyqtSignal(str)
+    exec_signal = pyqtSignal(str, str)
 
-    def __init__(self, mtp_files=None, recipe_files=None, log_callback=None):
+    def __init__(self, mtp_files=None, recipe_files=None):
         super().__init__()
         self._mutex = QMutex()
         self._wait = QWaitCondition()
         self._input_response = ""
         self._mtp_files = mtp_files or []
         self._recipe_files = recipe_files or []
-        self._log_callback = log_callback
 
     def run(self):
         import builtins
@@ -57,12 +58,27 @@ class ControlRunner(QObject):
 
         builtins.input = _input
         try:
-            control.run_from_files(mtp_files=self._mtp_files, recipe_files=self._recipe_files, logger=self._log_callback)
+            control.run_from_files(mtp_files=self._mtp_files, recipe_files=self._recipe_files, logger=self._handle_log)
         except Exception:
             self.error.emit(traceback.format_exc())
         finally:
             builtins.input = original_input
             self.finished.emit()
+
+    def _handle_log(self, msg: str):
+        msg = str(msg)
+        self.log_signal.emit(msg)
+        if msg.startswith("[EXEC] Running step '"):
+            tail = msg[len("[EXEC] Running step '"):]
+            step_name = tail.split("'", 1)[0]
+            if step_name:
+                self.exec_signal.emit("step", step_name)
+            return
+        if msg.startswith("[EXEC] Transition " ):
+            cond = msg[len("[EXEC] Transition " ):].strip()
+            if cond:
+                self.exec_signal.emit("transition", cond)
+            return
 
     def provide_input(self, text: str):
         self._mutex.lock()
@@ -224,6 +240,14 @@ class SFCMonitor(QWidget):
         self._font_sub = QFont("Segoe UI", 8)
         # Step font increased by ~30%.
         self._font_step = QFont("Segoe UI", 16)
+        self._pen_active = QPen(QColor("#6dff7a"), 3)
+        self._brush_active = QBrush(QColor("#39ff14"))
+        self._step_nodes = {}
+        self._transition_nodes = {}
+        self._step_nodes_all = []
+        self._transition_nodes_all = []
+        self._init_nodes = []
+        self._end_nodes = []
 
     def update_data(self, sfc_rows: list):
         self.sfc_rows = sorted((sfc_rows or []), key=lambda x: x.get("seq", 0))
@@ -268,6 +292,12 @@ class SFCMonitor(QWidget):
         self.scene.clear()
         self._start_step_seq = None
         self._end_step_seq = None
+        self._step_nodes = {}
+        self._transition_nodes = {}
+        self._step_nodes_all = []
+        self._transition_nodes_all = []
+        self._init_nodes = []
+        self._end_nodes = []
 
         if not rows:
             txt = self.scene.addText("No SFC data to display", self._font_main)
@@ -363,23 +393,31 @@ class SFCMonitor(QWidget):
             self.execute_button.setEnabled(True)
             return
 
-        self._control_runner = ControlRunner(mtp_files=mtp_files or [], recipe_files=recipe_files or [], log_callback=self.log_callback)
+        self._control_runner = ControlRunner(mtp_files=mtp_files or [], recipe_files=recipe_files or [])
         self._control_runner.moveToThread(self._control_thread)
+        self._control_runner.log_signal.connect(self._append_log)
+        self._control_runner.exec_signal.connect(self._on_exec_event)
 
         self._control_thread.started.connect(self._control_runner.run)
         self._control_runner.input_requested.connect(self._prompt_for_input)
         self._control_runner.error.connect(self._handle_control_error)
+        self._control_runner.finished.connect(self._on_exec_finished)
         self._control_runner.finished.connect(self._control_thread.quit)
         self._control_runner.finished.connect(self._control_runner.deleteLater)
         self._control_thread.finished.connect(self._control_thread.deleteLater)
         self._control_thread.finished.connect(self._clear_control_runner)
         self._control_thread.finished.connect(lambda: self.execute_button.setEnabled(True))
 
+        self._highlight_init()
         self._control_thread.start()
 
     def _clear_control_runner(self):
         self._control_thread = None
         self._control_runner = None
+
+    def _append_log(self, msg: str):
+        if self.log_callback:
+            self.log_callback(msg)
 
     def _get_selected_files(self):
         main_win = self.window()
@@ -490,6 +528,63 @@ class SFCMonitor(QWidget):
         # Step box enlarged to ~1.3x.
         return 312.0, 112.0
 
+    def _normalize_key(self, text: str) -> str:
+        return re.sub(r"\s+", " ", (text or "")).strip()
+
+    def _register_node(self, row: dict, node_item: DraggableNodeItem):
+        kind = str(row.get("kind", "")).lower()
+        if kind == "transition":
+            key = self._normalize_key(str(row.get("condition", "")))
+            self._transition_nodes_all.append(node_item)
+            if key:
+                self._transition_nodes.setdefault(key, []).append(node_item)
+        else:
+            key = self._normalize_key(str(row.get("name", "")))
+            self._step_nodes_all.append(node_item)
+            if key:
+                self._step_nodes.setdefault(key, []).append(node_item)
+
+    def _reset_node_styles(self):
+        for node in self._step_nodes_all:
+            node.setPen(self._pen_step)
+            node.setBrush(self._brush_step)
+        for node in self._transition_nodes_all:
+            node.setPen(self._pen_trans)
+            node.setBrush(self._brush_trans)
+
+    def _highlight_nodes(self, nodes: list[DraggableNodeItem]):
+        for node in nodes:
+            node.setPen(self._pen_active)
+            node.setBrush(self._brush_active)
+
+    def _on_exec_event(self, kind: str, key: str):
+        key = self._normalize_key(key)
+        if not key:
+            return
+        if kind == "step":
+            nodes = self._step_nodes.get(key, [])
+        else:
+            nodes = self._transition_nodes.get(key, [])
+        if not nodes:
+            return
+        self._reset_node_styles()
+        self._highlight_nodes(nodes)
+
+    def _highlight_init(self):
+        if not self._init_nodes:
+            return
+        self._reset_node_styles()
+        self._highlight_nodes(self._init_nodes)
+
+    def _highlight_end(self):
+        if not self._end_nodes:
+            return
+        self._reset_node_styles()
+        self._highlight_nodes(self._end_nodes)
+
+    def _on_exec_finished(self):
+        self._highlight_end()
+
     def _add_draggable_node_rect(self, rect: QRectF, pen: QPen, brush: QBrush) -> DraggableNodeItem:
         item = DraggableNodeItem(QRectF(0, 0, rect.width(), rect.height()))
         item.setPen(pen)
@@ -505,6 +600,7 @@ class SFCMonitor(QWidget):
         kind = str(row.get("kind", ""))
         if kind.lower() == "transition":
             node_item = self._add_draggable_node_rect(rect, self._pen_trans, self._brush_trans)
+            self._register_node(row, node_item)
             cond = str(row.get("condition", "")).strip()
             cond = re.sub(r"\bStep\s+([^\s]+)", lambda m: f"Step\u00A0{m.group(1)}", cond)
             cond = re.sub(r"\s+is\s+", "\u00A0is\u00A0", cond)
@@ -521,11 +617,14 @@ class SFCMonitor(QWidget):
             return node_item
         else:
             node_item = self._add_draggable_node_rect(rect, self._pen_step, self._brush_step)
+            self._register_node(row, node_item)
             seq = row.get("seq")
             if seq == self._start_step_seq:
                 label = "Init"
+                self._init_nodes.append(node_item)
             elif seq == self._end_step_seq:
                 label = "End"
+                self._end_nodes.append(node_item)
             else:
                 name = str(row.get("name", "")).strip()
                 proc = str(row.get("procedure", "")).strip()

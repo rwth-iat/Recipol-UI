@@ -388,7 +388,7 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                 if type(p) is dict:
                     # simple step
                     if p['inst'] is None:
-                        step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                        step_name = (p['bml'].getName() or p['bml'].getId()) if p.get('bml') else '(unknown step)'
                         _log(f"[EXEC] Skipping step '{step_name}': no mapped MTP procedure (inst is None).")
                         # either initial or end step
                         continue
@@ -397,12 +397,12 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         global url
                         global ns
                         if p.get('mtp') is None:
-                            step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                            step_name = (p['bml'].getName() or p['bml'].getId()) if p.get('bml') else '(unknown step)'
                             _log(f"[EXEC] Step '{step_name}' has no MTP module mapping; cannot execute.")
                             raise ConnectionError("OPC UA Connection Failed: no MTP mapping for step.")
 
                         src_file = getattr(p['mtp'], "source_file", "")
-                        step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                        step_name = (p['bml'].getName() or p['bml'].getId()) if p.get('bml') else '(unknown step)'
                         proc_id = p['inst'].id if p.get('inst') else ''
                         _log(f"[EXEC] Running step '{step_name}' (procId='{proc_id}'), source='{src_file}'.")
                         nsid = p["mtp"].nsid
@@ -486,6 +486,7 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         cond:str = p[0].cond
                     else:
                         cond: str = p.cond
+                    _log(f"[EXEC] Transition {cond}")
                     if cond != "True":
                         if "AND" in cond or "OR" in cond or "NOT" in cond:
                             # To do 
