@@ -1,12 +1,12 @@
 import asyncio
 from asyncua import Client, ua
 import time
-import orchestration as oc
+from . import orchestration as oc
 from typing import Any
-import mtpparser as mtp
+from . import mtpparser as mtp
 import csv
-import b2mmlparser as bml
-import sequenz as seq
+from . import b2mmlparser as bml
+from . import sequenz as seq
 import os.path
 
 ### global variables
@@ -313,7 +313,9 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
     firstStepFlag = True
 
     # create filename with current timestamp
-    filename = f"Datahistory\\log_{time.strftime('%d-%m-%Y_%H-%M-%S')}.csv"
+    data_dir = os.path.join(os.path.dirname(__file__), "Datahistory")
+    os.makedirs(data_dir, exist_ok=True)
+    filename = os.path.join(data_dir, f"log_{time.strftime('%d-%m-%Y_%H-%M-%S')}.csv")
 
     # preliminary check for material requirements
     for p in proc:
@@ -356,7 +358,8 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                     pass
             else:
                 # draw sequence diagram
-                seq.drawSequenceDiagram(p, proc)
+                draw_item = p[0] if isinstance(p, tuple) else p
+                seq.drawSequenceDiagram(draw_item, proc)
 
                 # execute step
                 if type(p) is dict:
@@ -531,7 +534,10 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         pass
                     elif kw == "Step":
                         # fetch the step
-                        step = next(s for s in proc if type(s) is dict and s['bml'].name == inst)
+                        step = next((s for s in _iter_proc_items(proc) if isinstance(s, dict) and (s['bml'].getName() == inst or s['bml'].getId() == inst or s['bml'].name == inst)), None)
+                        if step is None:
+                            # no matching step found; abort transition handling
+                            return
                         service = step['mtp'].getService(step['inst'].serviceId)
                         
                         # check step state
@@ -581,30 +587,102 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                                 if checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 512:
                                     break
     
-### main
-if __name__ == "__main__":
-    # service = pea.getService(id="8c361264-6ceb-4825-9b55-3b404b33fd5f")
-    # proc = service.procs[2]
-    # param = proc.params[0]
-    # url = "opc.tcp://192.168.0.20:4840"
-    
-    #setOperationMode(opcurl=url, mode="aut", nsIndex=3, service=service)
-    # changeParameterValue(opcurl=url, mode="aut", nsIndex=7, service=service, param=param, value=5)
-    #setProcedure(opcurl=url, mode="op", nsIndex=3, service=service, procId=proc.procId)
-    # startService(opcurl=url, mode="op", nsIndex=3, service=service)
+def _normalize_proc_id(proc_id: str) -> str:
+    if ":" in proc_id:
+        return proc_id.rsplit(":", 1)[-1]
+    return proc_id
 
-    # setOperationMode(opcurl=url, mode="aut", nsIndex=3, service=service)
-    # resetService(opcurl=url, mode="aut", nsIndex=3, service=service)
 
-    # setOperationMode(opcurl=url, mode="aut", nsIndex=4, service=service)
-    # changeParameterValue(opcurl=url, mode="aut", nsIndex=4, service=service, param=param, value=5)
-    # setProcedure(opcurl=url, mode="aut", nsIndex=4, service=service, procId=2)
-    # startService(opcurl=url, mode="aut", nsIndex=4, service=service)
-    # resetService(opcurl=url, mode="aut", nsIndex=4, service=service)
-    
-    mtps:list[mtp.Pea] = mtp.getMtps()
+def _find_mtp_for_proc(mtps, proc_id: str):
+    for module in mtps:
+        if module.getProcedure(proc_id) is not None:
+            return module
+    return None
 
-    procedure = oc.getProcedure()
+
+def _find_mtp_for_condition(mtps, cond: str | None, fallback):
+    if not cond or cond == "True":
+        return fallback
+    parts = cond.split()
+    if len(parts) >= 2:
+        inst = parts[1]
+        for module in mtps:
+            if module.getInstanceByName(inst) is not None:
+                return module
+    return fallback
+
+
+def _map_params(mtp_proc, bml_proc):
+    if mtp_proc is None or bml_proc is None:
+        return []
+    params = []
+    for p in bml_proc.params:
+        if not p.id:
+            continue
+        inst = mtp_proc.getParameter(p.id)
+        if inst is None:
+            continue
+        params.append((inst, p.value))
+    return params
+
+
+def _iter_proc_items(proc: list):
+    for p in proc:
+        if isinstance(p, list):
+            for sub in p:
+                yield sub
+        else:
+            yield p
+
+
+def build_execution_procedure(recipe_files=None, mtp_files=None):
+    mtps = mtp.getMtps(input_files=mtp_files) if mtp_files else mtp.getMtps()
+    proc = []
+    files = recipe_files or [None]
+    fallback_mtp = mtps[0] if mtps else None
+    last_step_mtp = fallback_mtp
+
+    for recipe_file in files:
+        ordered = bml.main(input_file=recipe_file, validate_schema=False)
+        for item in ordered:
+            if isinstance(item, list):
+                group = []
+                for elem in item:
+                    converted = _convert_element(elem, mtps, fallback_mtp, last_step_mtp)
+                    group.append(converted)
+                    if isinstance(converted, dict) and converted.get("mtp"):
+                        last_step_mtp = converted["mtp"]
+                proc.append(group)
+            else:
+                converted = _convert_element(item, mtps, fallback_mtp, last_step_mtp)
+                proc.append(converted)
+                if isinstance(converted, dict) and converted.get("mtp"):
+                    last_step_mtp = converted["mtp"]
+
+    return proc, mtps
+
+
+def _convert_element(elem, mtps, fallback_mtp, last_step_mtp):
+    if elem.getType() == "Step":
+        bml_proc = elem.acts[0] if elem.acts else None
+        proc_id = _normalize_proc_id(bml_proc.id) if bml_proc else _normalize_proc_id(elem.getId())
+        mtp_mod = _find_mtp_for_proc(mtps, proc_id)
+        mtp_proc = mtp_mod.getProcedure(proc_id) if mtp_mod else None
+        params = _map_params(mtp_proc, bml_proc)
+        return {
+            "bml": elem,
+            "mtp": mtp_mod,
+            "inst": mtp_proc,
+            "params": params,
+        }
+    else:
+        cond = elem.cond
+        mtp_mod = _find_mtp_for_condition(mtps, cond, last_step_mtp or fallback_mtp)
+        return (elem, mtp_mod)
+
+
+def run_from_files(mtp_files=None, recipe_files=None):
+    procedure, mtps = build_execution_procedure(recipe_files=recipe_files, mtp_files=mtp_files)
 
     # operator sequence check
     print("\n" * 3)
@@ -612,3 +690,6 @@ if __name__ == "__main__":
 
     if ack.lower() == "y":
         main(procedure, mtps)
+### main
+if __name__ == "__main__":
+    run_from_files()

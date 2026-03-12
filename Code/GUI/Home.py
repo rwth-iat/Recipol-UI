@@ -34,6 +34,8 @@ class HomePage(QWidget):
         self.selected_file = ""
         self.selected_files = []
         self.last_run_has_aml = False
+        self.last_mtp_files = []
+        self.last_recipe_files = []
 
         # --------------------------------------------------
         # Artifact directory (project-root based)
@@ -378,6 +380,7 @@ class HomePage(QWidget):
             if f.lower().endswith('.aml')
         ]
         self.last_run_has_aml = len(aml_files) > 0
+        self.last_mtp_files = list(aml_files)
         
         # 获取非 aml 文件（如 .xml），用于日志记录
         recipe_files = [
@@ -385,6 +388,8 @@ class HomePage(QWidget):
             for f in self.selected_files
             if f.lower().endswith('.xml')
         ]
+
+        self.last_recipe_files = list(recipe_files)
         unsupported_files = [
             f for f in self.selected_files
             if not (f.lower().endswith('.aml') or f.lower().endswith('.xml'))

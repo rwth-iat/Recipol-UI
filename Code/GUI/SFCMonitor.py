@@ -4,7 +4,7 @@
 import math
 import re
 
-from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer
+from PyQt6.QtCore import QPointF, QRectF, Qt, QTimer, QObject, QThread, pyqtSignal, QMutex, QWaitCondition
 from PyQt6.QtGui import QBrush, QColor, QFont, QPainter, QPen, QPolygonF, QTextOption
 from PyQt6.QtWidgets import (
     QGraphicsItem,
@@ -13,11 +13,64 @@ from PyQt6.QtWidgets import (
     QGraphicsScene,
     QGraphicsView,
     QHBoxLayout,
+    QInputDialog,
+    QMessageBox,
+    QDialog,
+    QDialogButtonBox,
+    QTextEdit,
     QPushButton,
     QVBoxLayout,
     QWidget,
 )
-from qfluentwidgets import CardWidget, ComboBox, FluentIcon, SubtitleLabel, TitleLabel
+from qfluentwidgets import CardWidget, ComboBox, FluentIcon, SubtitleLabel, TitleLabel, PrimaryPushButton
+
+class ControlRunner(QObject):
+    input_requested = pyqtSignal(str)
+    finished = pyqtSignal()
+    error = pyqtSignal(str)
+
+    def __init__(self, mtp_files=None, recipe_files=None):
+        super().__init__()
+        self._mutex = QMutex()
+        self._wait = QWaitCondition()
+        self._input_response = ""
+        self._mtp_files = mtp_files or []
+        self._recipe_files = recipe_files or []
+
+    def run(self):
+        import builtins
+        import traceback
+        import Code.Recipol.control as control
+
+        original_input = builtins.input
+
+        def _input(prompt: str = "") -> str:
+            self._mutex.lock()
+            try:
+                self._input_response = ""
+                self.input_requested.emit(str(prompt))
+                self._wait.wait(self._mutex)
+                return self._input_response
+            finally:
+                self._mutex.unlock()
+
+        builtins.input = _input
+        try:
+            control.run_from_files(mtp_files=self._mtp_files, recipe_files=self._recipe_files)
+        except Exception:
+            self.error.emit(traceback.format_exc())
+        finally:
+            builtins.input = original_input
+            self.finished.emit()
+
+    def provide_input(self, text: str):
+        self._mutex.lock()
+        try:
+            self._input_response = text
+            self._wait.wakeAll()
+        finally:
+            self._mutex.unlock()
+
 
 
 class SFCGraphicsView(QGraphicsView):
@@ -126,6 +179,9 @@ class SFCMonitor(QWidget):
         self._start_step_seq = None
         self._end_step_seq = None
 
+        self._control_thread = None
+        self._control_runner = None
+
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
         layout.setSpacing(16)
@@ -142,6 +198,9 @@ class SFCMonitor(QWidget):
         self.recipe_combo.setMinimumWidth(320)
         self.recipe_combo.currentIndexChanged.connect(self._on_recipe_changed)
         self.selection_layout.addWidget(self.recipe_combo)
+        self.execute_button = PrimaryPushButton("Execute Recipe", self)
+        self.execute_button.clicked.connect(self._on_execute_recipe)
+        self.selection_layout.addWidget(self.execute_button)
         self.selection_layout.addStretch(1)
         layout.addWidget(self.selection_card)
 
@@ -288,6 +347,74 @@ class SFCMonitor(QWidget):
                 col_idx += 1
 
         self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-30, -20, 120, 40))
+
+    def _on_execute_recipe(self):
+        if self._control_thread and self._control_thread.isRunning():
+            QMessageBox.information(self, "Execute Recipe", "Recipe execution is already running.")
+            return
+
+        self.execute_button.setEnabled(False)
+        self._control_thread = QThread(self)
+        mtp_files, recipe_files = self._get_selected_files()
+        if mtp_files is None and recipe_files is None:
+            QMessageBox.information(self, "Execute Recipe", "No selected files found from Home page. Please select files and run Inspect first.")
+            self.execute_button.setEnabled(True)
+            return
+
+        self._control_runner = ControlRunner(mtp_files=mtp_files or [], recipe_files=recipe_files or [])
+        self._control_runner.moveToThread(self._control_thread)
+
+        self._control_thread.started.connect(self._control_runner.run)
+        self._control_runner.input_requested.connect(self._prompt_for_input)
+        self._control_runner.error.connect(self._handle_control_error)
+        self._control_runner.finished.connect(self._control_thread.quit)
+        self._control_runner.finished.connect(self._control_runner.deleteLater)
+        self._control_thread.finished.connect(self._control_thread.deleteLater)
+        self._control_thread.finished.connect(self._clear_control_runner)
+        self._control_thread.finished.connect(lambda: self.execute_button.setEnabled(True))
+
+        self._control_thread.start()
+
+    def _clear_control_runner(self):
+        self._control_thread = None
+        self._control_runner = None
+
+    def _get_selected_files(self):
+        main_win = self.window()
+        if not main_win or not hasattr(main_win, "home_page"):
+            return None, None
+        home = main_win.home_page
+        mtp_files = getattr(home, "last_mtp_files", None)
+        recipe_files = getattr(home, "last_recipe_files", None)
+        if mtp_files is None and recipe_files is None:
+            return None, None
+        return mtp_files or [], recipe_files or []
+
+    def _prompt_for_input(self, prompt: str):
+        text, ok = QInputDialog.getText(self, "Execute Recipe", prompt)
+        if not ok:
+            text = ""
+        if self._control_runner:
+            self._control_runner.provide_input(text)
+
+    def _handle_control_error(self, traceback_text: str):
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Execute Recipe")
+        dialog.setMinimumWidth(640)
+
+        layout = QVBoxLayout(dialog)
+        box = QTextEdit(dialog)
+        box.setReadOnly(True)
+        box.setPlainText(traceback_text)
+        box.setLineWrapMode(QTextEdit.LineWrapMode.NoWrap)
+        box.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard)
+        layout.addWidget(box)
+
+        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok, parent=dialog)
+        buttons.accepted.connect(dialog.accept)
+        layout.addWidget(buttons)
+
+        dialog.exec()
 
     def _build_zoom_controls(self):
         self.zoom_container = QWidget(self.view.viewport())
