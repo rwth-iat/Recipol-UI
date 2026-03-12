@@ -1459,15 +1459,15 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
 
 
     # debugging only
-    for m in mtps:
-        print(m.name)
-        for s in m.servs:
-            print(s.name, s.id)
-            for p in s.procs:
-                print("  ", p.name, p.id)
-                for pa in p.params:
-                    print("    ", pa.name, pa.id, pa.default, pa.unit)
-            print("\n")
+    # for m in mtps:
+    #     print(m.name)
+    #     for s in m.servs:
+    #         print(s.name, s.id)
+    #         for p in s.procs:
+    #             print("  ", p.name, p.id)
+    #             for pa in p.params:
+    #                 print("    ", pa.name, pa.id, pa.default, pa.unit)
+    #         print("\n")
 
     ## debugging only
     # print("Services: ")
@@ -1488,4 +1488,3 @@ def getMtps(input_files=None, logger=None) -> list[Pea]:
     #         print(sa.name, sa.paramElem["Ctrl"]["ID"])
 
     return mtps
-
