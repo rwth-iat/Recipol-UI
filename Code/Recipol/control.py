@@ -9,6 +9,29 @@ from . import b2mmlparser as bml
 from . import sequenz as seq
 import os.path
 
+_log_cb = None
+
+
+def _log(msg: str):
+    print(msg)
+    if _log_cb is not None:
+        try:
+            _log_cb(msg)
+        except Exception:
+            pass
+
+
+def _wait_until(check_fn, timeout_s: float, sleep_s: float, timeout_msg: str):
+    start = time.monotonic()
+    while True:
+        if check_fn():
+            return True
+        if time.monotonic() - start >= timeout_s:
+            _log(timeout_msg)
+            raise TimeoutError(timeout_msg)
+        time.sleep(sleep_s)
+
+
 ### global variables
 #url = "opc.tcp://192.168.0.10:4840"
 url = ""
@@ -365,6 +388,8 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                 if type(p) is dict:
                     # simple step
                     if p['inst'] is None:
+                        step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                        _log(f"[EXEC] Skipping step '{step_name}': no mapped MTP procedure (inst is None).")
                         # either initial or end step
                         continue
                     else:
@@ -372,9 +397,14 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         global url
                         global ns
                         if p.get('mtp') is None:
+                            step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                            _log(f"[EXEC] Step '{step_name}' has no MTP module mapping; cannot execute.")
                             raise ConnectionError("OPC UA Connection Failed: no MTP mapping for step.")
 
                         src_file = getattr(p['mtp'], "source_file", "")
+                        step_name = p['bml'].getName() if p.get('bml') else '(unknown step)'
+                        proc_id = p['inst'].id if p.get('inst') else ''
+                        _log(f"[EXEC] Running step '{step_name}' (procId='{proc_id}'), source='{src_file}'.")
                         nsid = p["mtp"].nsid
                         if url != p['mtp'].url or nsid is None:
                             url = p['mtp'].url
@@ -394,9 +424,13 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         # set service to automatic mode
                         setOperationMode(opcurl=url, mode="aut", nsIndex=nsid, service=service)
                         # check if mode has been set
-                        while(True):
-                            if checkAutomaticMode(opcurl=url, nsIndex=nsid, service=service):
-                                break
+                        _log(f"[EXEC] Waiting for automatic mode on service '{service.name}'...")
+                        _wait_until(
+                            lambda: checkAutomaticMode(opcurl=url, nsIndex=nsid, service=service),
+                            timeout_s=30,
+                            sleep_s=0.5,
+                            timeout_msg=f"[EXEC] Timeout waiting for automatic mode on service '{service.name}'."
+                        )
                         
                         # set procedure
                         setProcedure(opcurl=url, mode="aut", nsIndex=nsid, service=service, procId=procedure.procId)
@@ -498,10 +532,13 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         else:
                             # complete service
                             completeService(url, "aut", nsid, service)
-                        while True:
-                            state = checkCurrentState(opcurl=url, nsIndex=nsid, service=service)
-                            if state == 131072 or state == 4:
-                                break
+                        _log(f"[EXEC] Waiting for service '{service.name}' to complete/stop...")
+                        _wait_until(
+                            lambda: (checkCurrentState(opcurl=url, nsIndex=nsid, service=service) in (131072, 4)),
+                            timeout_s=60,
+                            sleep_s=0.5,
+                            timeout_msg=f"[EXEC] Timeout waiting for service '{service.name}' to complete/stop."
+                        )
                         # reset service
                         resetService(url, "aut", nsid, service)
                     elif kw == "Temp":
@@ -532,10 +569,13 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         else:
                             # complete service
                             completeService(url, "aut", nsid, service)
-                        while True:
-                            state = checkCurrentState(opcurl=url, nsIndex=nsid, service=service)
-                            if state == 131072 or state == 4:
-                                break
+                        _log(f"[EXEC] Waiting for service '{service.name}' to complete/stop...")
+                        _wait_until(
+                            lambda: (checkCurrentState(opcurl=url, nsIndex=nsid, service=service) in (131072, 4)),
+                            timeout_s=60,
+                            sleep_s=0.5,
+                            timeout_msg=f"[EXEC] Timeout waiting for service '{service.name}' to complete/stop."
+                        )
                         # reset service
                         resetService(url, "aut", nsid, service)
                     elif kw == "Material":
@@ -551,17 +591,29 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         
                         # check step state
                         if value == "Idle":
-                            while(True):
-                                if checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 16:
-                                    break
+                            _log(f"[EXEC] Waiting for step '{inst}' to become Idle...")
+                            _wait_until(
+                                lambda: checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 16,
+                                timeout_s=60,
+                                sleep_s=0.5,
+                                timeout_msg=f"[EXEC] Timeout waiting for step '{inst}' to become Idle."
+                            )
                         elif value == "Paused":
-                            while(True):
-                                if checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 32:
-                                    break
+                            _log(f"[EXEC] Waiting for step '{inst}' to become Paused...")
+                            _wait_until(
+                                lambda: checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 32,
+                                timeout_s=60,
+                                sleep_s=0.5,
+                                timeout_msg=f"[EXEC] Timeout waiting for step '{inst}' to become Paused."
+                            )
                         elif value == "Held":
-                            while(True):
-                                if checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 2048:
-                                    break
+                            _log(f"[EXEC] Waiting for step '{inst}' to become Held...")
+                            _wait_until(
+                                lambda: checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 2048,
+                                timeout_s=60,
+                                sleep_s=0.5,
+                                timeout_msg=f"[EXEC] Timeout waiting for step '{inst}' to become Held."
+                            )
                         elif value == "Completed":
                             while(True):
                                 if checkCurrentState(opcurl=url, nsIndex=nsid, service=service) == 131072:
@@ -690,7 +742,9 @@ def _convert_element(elem, mtps, fallback_mtp, last_step_mtp):
         return (elem, mtp_mod)
 
 
-def run_from_files(mtp_files=None, recipe_files=None):
+def run_from_files(mtp_files=None, recipe_files=None, logger=None):
+    global _log_cb
+    _log_cb = logger
     procedure, mtps = build_execution_procedure(recipe_files=recipe_files, mtp_files=mtp_files)
 
     # operator sequence check

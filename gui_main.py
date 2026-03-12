@@ -30,7 +30,7 @@ class MainWindow(FluentWindow):
         # Pages
         self.log_page = LogPage(self)
         self.mtpviewer_page = MTPViewer(self)
-        self.sfcmonitor_page = SFCMonitor(self)
+        self.sfcmonitor_page = SFCMonitor(self.log_page.append_log, self)
         self.home_page = HomePage(self.log_page.append_log, self)
         self.home_page.data_ready_signal.connect(self.mtpviewer_page.update_data)      # data_ready_signal emit后，先通过信号自动通知 viewer_page 更新界面，（由于self.data_ready_signal.emit(parsed_mtps)传递来了parsed_mtps，即执行update_data(parsed_mtps)）
         self.home_page.data_ready_signal.connect(self.switch_to_viewer)             # 后跳转

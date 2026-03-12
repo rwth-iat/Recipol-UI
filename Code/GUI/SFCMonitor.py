@@ -29,13 +29,14 @@ class ControlRunner(QObject):
     finished = pyqtSignal()
     error = pyqtSignal(str)
 
-    def __init__(self, mtp_files=None, recipe_files=None):
+    def __init__(self, mtp_files=None, recipe_files=None, log_callback=None):
         super().__init__()
         self._mutex = QMutex()
         self._wait = QWaitCondition()
         self._input_response = ""
         self._mtp_files = mtp_files or []
         self._recipe_files = recipe_files or []
+        self._log_callback = log_callback
 
     def run(self):
         import builtins
@@ -56,7 +57,7 @@ class ControlRunner(QObject):
 
         builtins.input = _input
         try:
-            control.run_from_files(mtp_files=self._mtp_files, recipe_files=self._recipe_files)
+            control.run_from_files(mtp_files=self._mtp_files, recipe_files=self._recipe_files, logger=self._log_callback)
         except Exception:
             self.error.emit(traceback.format_exc())
         finally:
@@ -171,7 +172,7 @@ class SFCEdge:
 
 
 class SFCMonitor(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, log_callback=None, parent=None):
         super().__init__(parent=parent)
         self.setObjectName("RecipeMonitor")
         self.sfc_rows = []
@@ -181,6 +182,7 @@ class SFCMonitor(QWidget):
 
         self._control_thread = None
         self._control_runner = None
+        self.log_callback = log_callback
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(30, 30, 30, 30)
@@ -361,7 +363,7 @@ class SFCMonitor(QWidget):
             self.execute_button.setEnabled(True)
             return
 
-        self._control_runner = ControlRunner(mtp_files=mtp_files or [], recipe_files=recipe_files or [])
+        self._control_runner = ControlRunner(mtp_files=mtp_files or [], recipe_files=recipe_files or [], log_callback=self.log_callback)
         self._control_runner.moveToThread(self._control_thread)
 
         self._control_thread.started.connect(self._control_runner.run)
