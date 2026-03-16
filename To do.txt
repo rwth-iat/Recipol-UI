@@ -1,2 +1,1 @@
-1. Fixed: empty/wrong-formatted file processing at MTP viewer.
-2. Fixed: sensor/actuator as parameters of procedures added and displayed in MTP Viewer
+1. To be fixed: 在执行该步骤的时候，让该步保持绿色；查看zenon里的颜色是怎么设置的

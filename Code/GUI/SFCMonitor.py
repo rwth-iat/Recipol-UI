@@ -217,6 +217,7 @@ class SFCMonitor(QWidget):
         self.recipe_combo.currentIndexChanged.connect(self._on_recipe_changed)
         self.selection_layout.addWidget(self.recipe_combo)
         self.execute_button = PrimaryPushButton("Execute Recipe", self)
+        self.execute_button.setEnabled(False)
         self.execute_button.clicked.connect(self._on_execute_recipe)
         self.selection_layout.addWidget(self.execute_button)
         self.selection_layout.addStretch(1)
@@ -250,6 +251,7 @@ class SFCMonitor(QWidget):
         self._end_nodes = []
 
     def update_data(self, sfc_rows: list):
+        self._sync_execute_button()
         self.sfc_rows = sorted((sfc_rows or []), key=lambda x: x.get("seq", 0))
         self.recipe_groups = []
 
@@ -410,6 +412,20 @@ class SFCMonitor(QWidget):
 
         self._highlight_init()
         self._control_thread.start()
+
+    def _sync_execute_button(self):
+        self.execute_button.setEnabled(self._home_has_aml())
+
+    def _home_has_aml(self) -> bool:
+        main_win = self.window()
+        if not main_win or not hasattr(main_win, "home_page"):
+            return False
+        home = main_win.home_page
+        if getattr(home, "last_run_has_aml", False):
+            return True
+        mtp_files = getattr(home, "last_mtp_files", None)
+        return bool(mtp_files)
+
 
     def _clear_control_runner(self):
         self._control_thread = None
