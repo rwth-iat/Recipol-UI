@@ -336,10 +336,10 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
     firstStepFlag = True
 
     # create filename with current timestamp
-    data_dir = os.path.join(os.path.dirname(__file__), "Datahistory")
-    os.makedirs(data_dir, exist_ok=True)
-    filename = os.path.join(data_dir, f"log_{time.strftime('%d-%m-%Y_%H-%M-%S')}.csv")
-
+#     data_dir = os.path.join(os.path.dirname(__file__), "Datahistory")
+#     os.makedirs(data_dir, exist_ok=True)
+#     filename = os.path.join(data_dir, f"log_{time.strftime('%d-%m-%Y_%H-%M-%S')}.csv")
+# 
     # preliminary check for material requirements
     for p in proc:
         if type(p) is list:
@@ -460,25 +460,25 @@ def main(proc:list[dict[bml.Element, mtp.Pea, mtp.Procedure, list[mtp.Instance]]
                         time.sleep(0.5)
 
                         # status monitoring
-                        statuses = statusMonitoring(peas=mtps, url=url, idx=nsid)
-                        
-                        with open(filename, 'a', newline='') as csvfile:
-                            writer = csv.writer(csvfile)
-                            if firstStepFlag == True:
-                                writer.writerow(headers)
-                                firstStepFlag = False
-                            rowToWrite = []
-                            for head in headers:
-                                for s in statuses:
-                                    if s["Name"] == head:
-                                        if head == "Time":
-                                            rowToWrite.append(time.asctime(s["Value"]))
-                                        else:
-                                            rowToWrite.append(s["Value"])
-                                        break
-                                else:
-                                    rowToWrite.append("NaN")
-                            writer.writerow(rowToWrite)
+#                         statuses = statusMonitoring(peas=mtps, url=url, idx=nsid)
+#                         
+#                         with open(filename, 'a', newline='') as csvfile:
+#                             writer = csv.writer(csvfile)
+#                             if firstStepFlag == True:
+#                                 writer.writerow(headers)
+#                                 firstStepFlag = False
+#                             rowToWrite = []
+#                             for head in headers:
+#                                 for s in statuses:
+#                                     if s["Name"] == head:
+#                                         if head == "Time":
+#                                             rowToWrite.append(time.asctime(s["Value"]))
+#                                         else:
+#                                             rowToWrite.append(s["Value"])
+#                                         break
+#                                 else:
+#                                     rowToWrite.append("NaN")
+#                             writer.writerow(rowToWrite)
                 else:
                     # simple transition
                     # fetch keyword, instance, operator and value

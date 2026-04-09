@@ -1,1 +1,1 @@
-1. To be fixed: 在执行该步骤的时候，让该步保持绿色；查看zenon里的颜色是怎么设置的
+1. To be fixed:当modular plant重新启动时，发现UI执行所有步骤，并未按照设定的parameter值来做，通过改recipe里的值，也无法进行调整；在运行了recipol的源代码之后，感觉里面parameter的值被记录了，之后无论怎么改recipe里parameter的值都没用。
