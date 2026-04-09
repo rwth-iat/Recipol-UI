@@ -674,14 +674,17 @@ def _find_mtp_for_condition(mtps, cond: str | None, fallback):
     return fallback
 
 
-def _map_params(mtp_proc, bml_proc):
-    if mtp_proc is None or bml_proc is None:
+def _map_params(mtp_proc, bml_elem):
+    if mtp_proc is None or bml_elem is None:
         return []
     params = []
-    for p in bml_proc.params:
+    # Prefer recipe element parameters (from MasterRecipe) to ensure values are applied.
+    bml_params = bml_elem.getParameter() if hasattr(bml_elem, "getParameter") else []
+    for p in bml_params:
         if not p.id:
             continue
-        inst = mtp_proc.getParameter(p.id)
+        pid = p.id.rsplit(":", 1)[-1] if ":" in p.id else p.id
+        inst = mtp_proc.getParameter(pid)
         if inst is None:
             continue
         params.append((inst, p.value))
@@ -730,7 +733,7 @@ def _convert_element(elem, mtps, fallback_mtp, last_step_mtp):
         proc_id = _normalize_proc_id(bml_proc.id) if bml_proc else _normalize_proc_id(elem.getId())
         mtp_mod = _find_mtp_for_proc(mtps, proc_id)
         mtp_proc = mtp_mod.getProcedure(proc_id) if mtp_mod else None
-        params = _map_params(mtp_proc, bml_proc)
+        params = _map_params(mtp_proc, elem)
         return {
             "bml": elem,
             "mtp": mtp_mod,
