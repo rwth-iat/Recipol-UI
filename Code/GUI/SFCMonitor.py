@@ -249,6 +249,9 @@ class SFCMonitor(QWidget):
         self._transition_nodes_all = []
         self._init_nodes = []
         self._end_nodes = []
+        self._last_highlight_kind = None
+        self._highlight_token = 0
+        self._pending_transition_nodes = []
 
     def update_data(self, sfc_rows: list):
         self._sync_execute_button()
@@ -300,6 +303,9 @@ class SFCMonitor(QWidget):
         self._transition_nodes_all = []
         self._init_nodes = []
         self._end_nodes = []
+        self._last_highlight_kind = None
+        self._highlight_token = 0
+        self._pending_transition_nodes = []
 
         if not rows:
             txt = self.scene.addText("No SFC data to display", self._font_main)
@@ -573,6 +579,14 @@ class SFCMonitor(QWidget):
             node.setPen(self._pen_active)
             node.setBrush(self._brush_active)
 
+    def _flash_transition_then_step(self, token: int, step_nodes: list[DraggableNodeItem]):
+        if token != self._highlight_token:
+            return
+        # After the brief transition flash, highlight the next step.
+        self._reset_node_styles()
+        self._highlight_nodes(step_nodes)
+        self._last_highlight_kind = "step"
+
     def _on_exec_event(self, kind: str, key: str):
         key = self._normalize_key(key)
         if not key:
@@ -583,8 +597,26 @@ class SFCMonitor(QWidget):
             nodes = self._transition_nodes.get(key, [])
         if not nodes:
             return
+        if kind == "transition":
+            # Only flash transition right before the next step, not immediately.
+            self._pending_transition_nodes = nodes
+            return
+        # Step event
+        self._highlight_token += 1
+        token = self._highlight_token
+        pending = self._pending_transition_nodes
+        self._pending_transition_nodes = []
+        if pending:
+            # Briefly show the transition, then move to the step.
+            self._reset_node_styles()
+            self._highlight_nodes(pending)
+            self._last_highlight_kind = "transition"
+            QTimer.singleShot(160, lambda: self._flash_transition_then_step(token, nodes))
+            return
+        # No pending transition: highlight step immediately.
         self._reset_node_styles()
         self._highlight_nodes(nodes)
+        self._last_highlight_kind = "step"
 
     def _highlight_init(self):
         if not self._init_nodes:
